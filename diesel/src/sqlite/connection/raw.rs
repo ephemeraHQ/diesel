@@ -218,6 +218,44 @@ impl RawConnection {
     }
 
     pub(super) fn deserialize(&mut self, data: &[u8]) -> QueryResult<()> {
+        //unsafe {
+        //    let db_name =
+        //        ffi::sqlite3_db_filename(self.internal_connection.as_ptr(), std::ptr::null());
+        //
+        //    if !db_name.is_null() {
+        //        return Err(Error::DatabaseError(
+        //            DatabaseErrorKind::UnableToSendCommand,
+        //            Box::new("deserialize can only be used with in-memory databases".to_string()),
+        //        ));
+        //    }
+        //}
+
+        let mut data = data.to_vec();
+        let data_ptr = data.as_mut_ptr();
+        let db_size = data
+            .len()
+            .try_into()
+            .map_err(|e| Error::DeserializationError(Box::new(e)))?;
+        std::mem::forget(data);
+
+        // the cast for `ffi::SQLITE_DESERIALIZE_READONLY` is required for old libsqlite3-sys versions
+        #[allow(clippy::unnecessary_cast)]
+        unsafe {
+            let result = ffi::sqlite3_deserialize(
+                self.internal_connection.as_ptr(),
+                std::ptr::null(),
+                data_ptr as *mut u8,
+                db_size,
+                db_size,
+                ffi::SQLITE_DESERIALIZE_FREEONCLOSE as u32
+                    | ffi::SQLITE_DESERIALIZE_RESIZEABLE as u32,
+            );
+
+            ensure_sqlite_ok(result, self.internal_connection.as_ptr())
+        }
+    }
+
+    pub(super) fn deserialize_readonly(&mut self, data: &[u8]) -> QueryResult<()> {
         let db_size = data
             .len()
             .try_into()

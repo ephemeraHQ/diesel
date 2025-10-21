@@ -570,6 +570,10 @@ impl SqliteConnection {
     /// # }
     /// ```
     pub fn deserialize_readonly_database_from_buffer(&mut self, data: &[u8]) -> QueryResult<()> {
+        self.raw_connection.deserialize_readonly(data)
+    }
+
+    pub fn deserialize_database_from_buffer(&mut self, data: &[u8]) -> QueryResult<()> {
         self.raw_connection.deserialize(data)
     }
 
