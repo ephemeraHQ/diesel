@@ -218,38 +218,38 @@ impl RawConnection {
     }
 
     pub(super) fn deserialize(&mut self, data: &[u8]) -> QueryResult<()> {
-        //unsafe {
-        //    let db_name =
-        //        ffi::sqlite3_db_filename(self.internal_connection.as_ptr(), std::ptr::null());
-        //
-        //    if !db_name.is_null() {
-        //        return Err(Error::DatabaseError(
-        //            DatabaseErrorKind::UnableToSendCommand,
-        //            Box::new("deserialize can only be used with in-memory databases".to_string()),
-        //        ));
-        //    }
-        //}
-
-        let mut data = data.to_vec();
-        let data_ptr = data.as_mut_ptr();
-        let db_size = data
+        let db_size: i64 = data
             .len()
             .try_into()
             .map_err(|e| Error::DeserializationError(Box::new(e)))?;
-        std::mem::forget(data);
 
-        // the cast for `ffi::SQLITE_DESERIALIZE_READONLY` is required for old libsqlite3-sys versions
-        #[allow(clippy::unnecessary_cast)]
         unsafe {
+            // Allocate memory using SQLite's allocator
+            let data_ptr = ffi::sqlite3_malloc64(db_size as u64) as *mut u8;
+            if data_ptr.is_null() {
+                return Err(Error::DatabaseError(
+                    DatabaseErrorKind::UnableToSendCommand,
+                    Box::new("Failed to allocate memory for deserialization".to_string()),
+                ));
+            }
+
+            // Copy data into SQLite-allocated memory
+            std::ptr::copy_nonoverlapping(data.as_ptr(), data_ptr, data.len());
+
             let result = ffi::sqlite3_deserialize(
                 self.internal_connection.as_ptr(),
                 std::ptr::null(),
-                data_ptr as *mut u8,
+                data_ptr,
                 db_size,
                 db_size,
                 ffi::SQLITE_DESERIALIZE_FREEONCLOSE as u32
                     | ffi::SQLITE_DESERIALIZE_RESIZEABLE as u32,
             );
+
+            if result != ffi::SQLITE_OK {
+                // If deserialize failed, we need to free the memory ourselves
+                ffi::sqlite3_free(data_ptr as *mut _);
+            }
 
             ensure_sqlite_ok(result, self.internal_connection.as_ptr())
         }
