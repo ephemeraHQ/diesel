@@ -171,7 +171,9 @@
 //!   crate so libmysqlclient will be bundled:
 //!   ```toml
 //!   [dependencies]
-//!   mysqlclient-sys = { version = "0.4", features = ["bundled"] }
+//!   mysqlclient-sys = { version = "0.5", features = ["bundled"] }
+//!   openssl-sys = { version = "0.9.100", features = ["vendored"] }
+//!   ```
 //! - `postgres_backend`: This feature enables those parts of diesels postgres backend, that are not dependent
 //!   on `libpq`. Diesel does not provide any connection implementation with only this feature enabled.
 //!   This feature can be used to implement a custom implementation of diesels `Connection` trait for the
@@ -232,8 +234,8 @@
     feature = "unstable",
     warn(fuzzy_provenance_casts, lossy_provenance_casts)
 )]
-#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg, rustdoc_internals))]
-#![cfg_attr(docsrs, expect(internal_features))]
+#![cfg_attr(diesel_docsrs, feature(doc_cfg, rustdoc_internals))]
+#![cfg_attr(diesel_docsrs, expect(internal_features))]
 #![cfg_attr(feature = "128-column-tables", recursion_limit = "256")]
 // Built-in Lints
 #![warn(
@@ -267,12 +269,7 @@
     clippy::cast_sign_loss
 )]
 #![deny(unsafe_code)]
-#![cfg_attr(test, allow(clippy::map_unwrap_or, clippy::unwrap_used))]
-
-// Running wasm tests on dedicated_worker
-#[cfg(test)]
-#[cfg(all(target_family = "wasm", target_os = "unknown"))]
-wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_dedicated_worker);
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 extern crate diesel_derives;
 
@@ -319,6 +316,8 @@ pub mod pg;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 
+#[macro_use]
+mod reexport_ambiguities;
 mod type_impls;
 mod util;
 
@@ -332,16 +331,17 @@ pub use diesel_derives::{
 
 pub use diesel_derives::MultiConnection;
 
-#[allow(unknown_lints, ambiguous_glob_reexports)]
 pub mod dsl {
     //! Includes various helper types and bare functions which are named too
     //! generically to be included in prelude, but are often used when using Diesel.
 
+    make_proxy_mod!(helper_types_proxy, crate::helper_types);
     #[doc(inline)]
-    pub use crate::helper_types::*;
+    pub use helper_types_proxy::*;
 
+    make_proxy_mod!(expression_dsl_proxy, crate::expression::dsl);
     #[doc(inline)]
-    pub use crate::expression::dsl::*;
+    pub use expression_dsl_proxy::*;
 
     #[doc(inline)]
     pub use crate::query_builder::functions::{
